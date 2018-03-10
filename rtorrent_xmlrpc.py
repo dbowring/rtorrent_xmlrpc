@@ -1,7 +1,8 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 # rtorrent_xmlrpc
 # (c) 2011 Roger Que <alerante@bellsouth.net>
+# Updated for python3 by Daniel Bowring <contact@danielb.codes>
 #
 # Python module for interacting with rtorrent's XML-RPC interface
 # directly over SCGI, instead of through an HTTP server intermediary.
@@ -13,11 +14,11 @@
 #
 # Usage: server = SCGIServerProxy('scgi://localhost:7000/')
 #        server = SCGIServerProxy('scgi:///path/to/scgi.sock')
-#        print server.system.listMethods()
+#        print(server.system.listMethods())
 #        mc = xmlrpclib.MultiCall(server)
 #        mc.get_up_rate()
 #        mc.get_down_rate()
-#        print mc()
+#        print(mc())
 #
 #
 #
@@ -25,12 +26,12 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -80,23 +81,40 @@
 
 import re
 import socket
-import urllib
-import xmlrpclib
+import string
+import collections
+import xmlrpc.client
 
 
-class SCGITransport(xmlrpclib.Transport):
+
+NULL = b'\x00'
+
+
+class SCGITransport(xmlrpc.client.Transport):
+    def encode_scgi_headers(self, content_length, **others):
+        # Need to use an ordered dict because content length MUST be the first
+        #  key present in the encoded headers.
+        headers = collections.OrderedDict((
+            (b'CONTENT_LENGTH', str(content_length).encode('utf-8')),
+            (b'SCGI', b'1'),
+        ))
+        headers.update(others)  # Assume already bytes for keys and values
+
+        encoded = NULL.join( k + NULL + v for k, v in headers.items() ) + NULL
+        length = str(len(encoded)).encode('utf-8')
+        return length + b':' + encoded
+
+
     def single_request(self, host, handler, request_body, verbose=0):
         # Add SCGI headers to the request.
-        headers = {'CONTENT_LENGTH': str(len(request_body)), 'SCGI': '1'}
-        header = '\x00'.join(('%s\x00%s' % item for item in headers.iteritems())) + '\x00'
-        header = '%d:%s' % (len(header), header)
-        request_body = '%s,%s' % (header, request_body)
-        
+        header = self.encode_scgi_headers(len(request_body))
+        scgi_request = header + b',' + request_body
+
         sock = None
-        
+
         try:
             if host:
-                host, port = urllib.splitport(host)
+                host, port = splitport(host)
                 addrinfo = socket.getaddrinfo(host, port, socket.AF_INET,
                                               socket.SOCK_STREAM)
                 sock = socket.socket(*addrinfo[0][:3])
@@ -104,99 +122,117 @@ class SCGITransport(xmlrpclib.Transport):
             else:
                 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 sock.connect(handler)
-            
+
             self.verbose = verbose
-            
-            sock.send(request_body)
+
+            sock.send(scgi_request)
             return self.parse_response(sock.makefile())
         finally:
             if sock:
                 sock.close()
-    
+
     def parse_response(self, response):
         p, u = self.getparser()
-        
+
         response_body = ''
         while True:
             data = response.read(1024)
             if not data:
                 break
             response_body += data
-        
+
         # Remove SCGI headers from the response.
         response_header, response_body = re.split(r'\n\s*?\n', response_body,
                                                   maxsplit=1)
-        
+
         if self.verbose:
-            print 'body:', repr(response_body)
-        
+            print('body:', repr(response_body))
+
         p.feed(response_body)
         p.close()
-        
+
         return u.close()
 
 
-class SCGIServerProxy(xmlrpclib.ServerProxy):
-    def __init__(self, uri, transport=None, encoding=None, verbose=False,
-                 allow_none=False, use_datetime=False):
-        type, uri = urllib.splittype(uri)
-        if type not in ('scgi'):
-            raise IOError('unsupported XML-RPC protocol')
-        self.__host, self.__handler = urllib.splithost(uri)
-        if not self.__handler:
-            self.__handler = '/'
-        
+class SCGIServerProxy(xmlrpc.client.ServerProxy):
+    def __init__(self, uri, transport=None, use_datetime=False,
+                 use_builtin_types=False, **kwargs):
         if transport is None:
-            transport = SCGITransport(use_datetime=use_datetime)
-        self.__transport = transport
-        
-        self.__encoding = encoding
-        self.__verbose = verbose
-        self.__allow_none = allow_none
- 
-    def __close(self):
-        self.__transport.close()
-    
-    def __request(self, methodname, params):
-        # call a method on the remote server
-    
-        request = xmlrpclib.dumps(params, methodname, encoding=self.__encoding,
-                                  allow_none=self.__allow_none)
-    
-        response = self.__transport.request(
-            self.__host,
-            self.__handler,
-            request,
-            verbose=self.__verbose
-            )
-    
-        if len(response) == 1:
-            response = response[0]
-    
-        return response
-    
-    def __repr__(self):
-        return (
-            "<SCGIServerProxy for %s%s>" %
-            (self.__host, self.__handler)
-            )
-    
-    __str__ = __repr__
-    
-    def __getattr__(self, name):
-        # magic method dispatcher
-        return xmlrpclib._Method(self.__request, name)
+            transport = SCGITransport(use_datetime=use_datetime,
+                                      use_builtin_types=use_builtin_types)
 
-    # note: to call a remote object with an non-standard name, use
-    # result getattr(server, "strange-python-name")(args)
+        # Feed some junk in here, but we'll fix it afterwards
+        super().__init__('http://thiswillbe/overwritten', transport=transport, **kwargs)
 
-    def __call__(self, attr):
-        """A workaround to get special attributes on the ServerProxy
-           without interfering with the magic __getattr__
-        """
-        if attr == "close":
-            return self.__close
-        elif attr == "transport":
-            return self.__transport
-        raise AttributeError("Attribute %r not found" % (attr,))
+        # Fix the result of the junk above
+        scheme, uri = splittype(uri)
+
+        if scheme != 'scgi':
+            raise IOError('unsupported XML-RPC protocol')
+
+        # The weird names here are because name mangling. See:
+        #  https://docs.python.org/3/tutorial/classes.html#private-variables
+        self._ServerProxy__host, self._ServerProxy__handler = splithost(uri)
+
+        if not self._ServerProxy__handler:
+            self._ServerProxy__handler = '/'
+
+
+def splittype(url):
+    '''
+    splittype('type:opaquestring') --> 'type', 'opaquestring'.
+
+    If type is unknown, it will be `None`. Type will always be returned
+     in lowercase.
+    This functionality use to (sort of) be provided by urllib as
+     `urllib.splittype` in python2, but has since been removed.
+    '''
+    try:
+        split_at = url.index(':')
+    except ValueError:
+        return None, url  # Can't tell what the type is
+
+    # Don't include the colon in either value.
+    return url[:split_at].lower(), url[split_at+1:]
+
+
+def splithost(url):
+    '''
+    splithost('//host[:port]/path') --> 'host[:port]', '/path'.
+
+    This functionality use to (sort of) be provided by urllib as
+     `urllib.splithost` in python2, but has since been removed.
+    '''
+
+    if not url.startswith('//'):
+        return None, url  # Probably a relative path
+
+    hostpath = url[2:]  # remove the '//'
+
+    try:
+        split_from = hostpath.index('/')
+    except ValueError:
+        return url, None  # Seems to contain host only
+
+    # Unlike `splittype`, we want the separating character in the path
+    return hostpath[:split_from], hostpath[split_from:]
+
+
+def is_non_digit(character):
+    return not character in string.digits
+
+def splitport(hostport):
+    '''
+    splitport('host:port') --> 'host', 'port'.
+    '''
+
+    try:
+        host, port = hostport.split(':', 1)  # ValueError if there is no colon
+        if any(is_non_digit, port):
+            raise ValueError('Port must contain only digits')
+    except ValueError:
+        return hostport, None
+
+    return host, port
+
 
