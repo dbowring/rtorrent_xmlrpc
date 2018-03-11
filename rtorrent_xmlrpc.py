@@ -20,6 +20,11 @@ import xmlrpc.client
 
 
 
+__all__ = [
+    'SCGITransport',
+    'SCGIServerProxy'
+]
+
 NULL = b'\x00'
 
 
