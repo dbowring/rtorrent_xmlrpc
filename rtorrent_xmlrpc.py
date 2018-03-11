@@ -123,7 +123,7 @@ class SCGIServerProxy(xmlrpc.client.ServerProxy):
         super().__init__('http://thiswillbe/overwritten', transport=transport, **kwargs)
 
         # Fix the result of the junk above
-        # The weird names here are because name mangling. See:
+        # The names are weird here because of name mangling. See:
         #  https://docs.python.org/3/tutorial/classes.html#private-variables
         self._ServerProxy__host, self._ServerProxy__handler = splithost(uri)
 
@@ -177,6 +177,9 @@ def is_non_digit(character):
 def splitport(hostport):
     '''
     splitport('host:port') --> 'host', 'port'.
+
+    This functionality use to (sort of) be provided by urllib as
+     `urllib.splithost` in python2, but has since been removed.
     '''
 
     try:
