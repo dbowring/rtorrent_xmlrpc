@@ -161,7 +161,6 @@ def splithost(url):
 
 
 def is_non_digit(character):
-    print('check', character)
     return not character in string.digits
 
 def splitport(hostport):
