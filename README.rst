@@ -20,6 +20,22 @@ Basic usage::
 
 See the `examples/` directory for more examples.
 
+You can also execute the module as a script to access a simple repl
+
+    python -m rtorrent_xmlrpc scgi:///var/run/rtorrent.sock
+
+type `exit` or `quit` exit the repl.
+
+------------
+Installation
+------------
+
+Using pip
+
+    pip install rtorrent_xmlrpc
+
+
+
 .. _Originally written: https://gist.github.com/query/899683
 .. _query: https://gist.github.com/query
 
