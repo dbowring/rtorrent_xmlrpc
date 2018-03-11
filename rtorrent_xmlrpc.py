@@ -161,6 +161,7 @@ def splithost(url):
 
 
 def is_non_digit(character):
+    print('check', character)
     return not character in string.digits
 
 def splitport(hostport):
@@ -170,9 +171,11 @@ def splitport(hostport):
 
     try:
         host, port = hostport.split(':', 1)  # ValueError if there is no colon
-        if any(is_non_digit, port):
-            raise ValueError('Port must contain only digits')
     except ValueError:
+        return hostport, None
+
+    # Port should contain only digits
+    if any(map(is_non_digit, port)):
         return hostport, None
 
     return host, port
