@@ -109,6 +109,12 @@ class SCGITransport(xmlrpc.client.Transport):
 class SCGIServerProxy(xmlrpc.client.ServerProxy):
     def __init__(self, uri, transport=None, use_datetime=False,
                  use_builtin_types=False, **kwargs):
+
+        scheme, uri = splittype(uri)
+
+        if scheme != 'scgi':
+            raise IOError('unsupported XML-RPC protocol')
+
         if transport is None:
             transport = SCGITransport(use_datetime=use_datetime,
                                       use_builtin_types=use_builtin_types)
@@ -117,11 +123,6 @@ class SCGIServerProxy(xmlrpc.client.ServerProxy):
         super().__init__('http://thiswillbe/overwritten', transport=transport, **kwargs)
 
         # Fix the result of the junk above
-        scheme, uri = splittype(uri)
-
-        if scheme != 'scgi':
-            raise IOError('unsupported XML-RPC protocol')
-
         # The weird names here are because name mangling. See:
         #  https://docs.python.org/3/tutorial/classes.html#private-variables
         self._ServerProxy__host, self._ServerProxy__handler = splithost(uri)
