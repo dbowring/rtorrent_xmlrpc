@@ -12,14 +12,6 @@
 #
 # [1] <http://libtorrent.rakshasa.no/wiki/UtilsXmlrpc2scgi>
 #
-# Usage: server = SCGIServerProxy('scgi://localhost:7000/')
-#        server = SCGIServerProxy('scgi:///path/to/scgi.sock')
-#        print(server.system.listMethods())
-#        mc = xmlrpclib.MultiCall(server)
-#        mc.get_up_rate()
-#        mc.get_down_rate()
-#        print(mc())
-#
 
 import re
 import socket
