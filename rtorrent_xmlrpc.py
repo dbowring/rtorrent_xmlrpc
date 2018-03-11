@@ -13,7 +13,6 @@
 # [1] <http://libtorrent.rakshasa.no/wiki/UtilsXmlrpc2scgi>
 #
 
-import re
 import socket
 import string
 import collections
@@ -65,6 +64,26 @@ class SCGITransport(xmlrpc.client.Transport):
             if sock:
                 sock.close()
 
+    def response_split_header(self, response):
+        try:
+            index = response.index('\n')
+            while not response[index+1] in string.whitespace:
+                index = response.index('\n', index+1)
+
+        except (ValueError, IndexError) as e:
+            msg = 'Unable to split response into header and body sections'
+            raise ValueError(msg) from e
+
+        offset = 2  # Know at least the following character is whitespace
+        try:
+            while response[index+offset] in string.whitespace:
+                offset + 1
+        except IndexError:
+            return response, ''  # Reached the end - there is no body
+
+        # Split by and remove the whitespace
+        return response[:index], response[index+offset:]
+
     def parse_response(self, response):
         p, u = self.getparser()
 
@@ -76,8 +95,7 @@ class SCGITransport(xmlrpc.client.Transport):
             response_body += data
 
         # Remove SCGI headers from the response.
-        response_header, response_body = re.split(r'\n\s*?\n', response_body,
-                                                  maxsplit=1)
+        response_header, response_body = self.response_split_header(response_body)
 
         if self.verbose:
             print('body:', repr(response_body))
